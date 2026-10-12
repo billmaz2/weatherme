@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Greece Weather Calendar</title>
+<style>
+body{font-family:system-ui,sans-serif;margin:0;padding:16px 16px 40vh;background:#f5f5f5;color:#222}
+.top{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+h1{font-size:1.3rem;margin:0}
+select,button{font-size:1rem;padding:5px 10px;border-radius:6px;border:1px solid #bbb}
+button{background:#0d5eaf;color:#fff;border:0;cursor:pointer}button:disabled{opacity:.4;cursor:default}
+.yr b{margin:0 8px}
+#status{font-size:.85rem;color:#555;margin:8px 0 10px}
+.legend{display:flex;flex-wrap:wrap;gap:12px;font-size:.82rem;margin-bottom:14px}
+.legend span::before{content:"";display:inline-block;width:14px;height:14px;border-radius:3px;margin-right:5px;vertical-align:-2px;background:var(--c)}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:16px}
+.month{background:#fff;border-radius:8px;padding:10px;box-shadow:0 1px 3px #0002}
+.month h2{font-size:1rem;margin:0 0 6px;text-align:center}
+.days{display:grid;grid-template-columns:repeat(7,1fr);gap:3px;text-align:center;font-size:.75rem}
+.dow{font-weight:600;color:#777}
+.d{aspect-ratio:1;display:flex;align-items:center;justify-content:center;border-radius:4px;background:#e5e5e5;color:#888;border:2px solid transparent}
+.d.click{cursor:pointer}.d.click:hover,.d.sel{border-color:#000}
+.g{background:#4caf50;color:#fff}.y{background:#fdd835;color:#222}.r{background:#e53935;color:#fff}
+#panel{position:fixed;left:0;right:0;bottom:0;max-height:45vh;overflow:auto;background:#fff;box-shadow:0 -3px 12px #0004;padding:12px 16px;display:none;border-radius:12px 12px 0 0}
+#panel h3{margin:0 0 8px;font-size:1rem}#panel button{float:right;background:#ddd;color:#222}
+table{border-collapse:collapse;font-size:.88rem}td{padding:4px 14px 4px 0;border-bottom:1px solid #eee}td:first-child{color:#667}
+.ok{color:#2e7d32;font-weight:700}.no{color:#c62828}
+/* Rules panel */
+#rulesBtn{background:#444}
+#rules{background:#fff;border-radius:8px;box-shadow:0 1px 3px #0002;padding:14px;margin-bottom:14px;display:none}
+#rules.open{display:block}
+#rules h3{margin:0 0 10px;font-size:1rem}
+.rrow{display:flex;gap:24px;flex-wrap:wrap}
+.rcard{flex:1;min-width:260px;border:2px solid;border-radius:8px;padding:10px 12px}
+.rcard.green{border-color:#4caf50}.rcard.red{border-color:#e53935}
+.rcard h4{margin:0 0 8px;font-size:.95rem}
+.cond{display:flex;align-items:center;gap:6px;margin:5px 0;font-size:.88rem;flex-wrap:wrap}
+.cond input[type=number]{width:60px;padding:2px 5px;border:1px solid #bbb;border-radius:4px}
+.cond.off{opacity:.35}
+.cond input[type=checkbox]{width:15px;height:15px}
+.wx{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:.85rem;margin:4px 0 0 20px}
+.wx label{display:flex;align-items:center;gap:4px}
+.note{font-size:.8rem;color:#666;margin-top:10px}
+#resetRules{background:#888;margin-top:10px}
+</style>
+</head>
+<body>
+<div class="top">
+  <h1>Greece weather calendar</h1>
+  <select id="city"></select>
+  <button id="go">OK</button>
+  <span class="yr"><button id="prev">◀</button><b id="yr"></b><button id="next">▶</button></span>
+  <button id="rulesBtn">⚙ Rules</button>
+</div>
+<div id="status">Choose a city and press OK.</div>
+<div class="legend">
+  <span style="--c:#4caf50" id="legG"></span>
+  <span style="--c:#e53935" id="legR"></span>
+  <span style="--c:#fdd835" id="legY"></span>
+  <span style="--c:#e5e5e5">Future / no data</span>
+</div>
+<div id="rules">
+  <h3>Painting rules — set your own thresholds, the calendar repaints instantly</h3>
+  <div class="rrow">
+    <div class="rcard green">
+      <h4>🟩 Green day (all enabled conditions must hold)</h4>
+      <div class="cond" data-r="g" data-k="min"><input type="checkbox" id="gMinOn"><label>min &gt;</label><input type="number" id="gMin" step="0.5"><label>°C</label></div>
+      <div class="cond" data-r="g" data-k="max"><input type="checkbox" id="gMaxOn"><label>max &lt;</label><input type="number" id="gMax" step="0.5"><label>°C</label></div>
+      <div class="cond" data-r="g" data-k="bft"><input type="checkbox" id="gBftOn"><label>wind ≤ Beaufort</label><input type="number" id="gBft" min="0" max="12"></div>
+      <div class="cond" data-r="g" data-k="wx"><input type="checkbox" id="gWxOn"><label>weather is one of:</label>
+        <div class="wx" id="gWx"></div>
+      </div>
+    </div>
+    <div class="rcard red">
+      <h4>🟥 Red day (all enabled conditions must hold)</h4>
+      <div class="cond" data-r="r" data-k="min"><input type="checkbox" id="rMinOn"><label>min &gt;</label><input type="number" id="rMin" step="0.5"><label>°C</label></div>
+      <div class="cond" data-r="r" data-k="max"><input type="checkbox" id="rMaxOn"><label>max &gt;</label><input type="number" id="rMax" step="0.5"><label>°C</label></div>
+      <div class="cond" data-r="r" data-k="bft"><input type="checkbox" id="rBftOn"><label>wind ≥ Beaufort</label><input type="number" id="rBft" min="0" max="12"></div>
+      <div class="cond" data-r="r" data-k="wx"><input type="checkbox" id="rWxOn"><label>weather is one of:</label>
+        <div class="wx" id="rWx"></div>
+      </div>
+    </div>
+  </div>
+  <div class="note">Yellow: any other day. Weather groups: Clear / Mainly clear · Partly cloudy · Overcast · Fog · Rain / Drizzle · Snow · Thunderstorm. Your settings are saved in this browser.</div>
+  <button id="resetRules">Reset to defaults</button>
+</div>
+<div class="grid" id="cal"></div>
+<div id="panel"><button id="close">Close ✕</button><h3 id="ptitle"></h3><div id="pbody"></div></div>
+
+<script>
+const CITIES={Athens:[37.98,23.73],Thessaloniki:[40.64,22.94],Patras:[38.25,21.73],Heraklion:[35.34,25.13],Larissa:[39.64,22.42],Volos:[39.36,22.94],Ioannina:[39.67,20.85],Chania:[35.51,24.02],Rhodes:[36.43,28.22],Kavala:[40.94,24.41],Alexandroupoli:[40.85,25.87],Kalamata:[37.04,22.11],Serres:[41.09,23.55],Chalkida:[38.46,23.60],Tripoli:[37.51,22.37],Corfu:[39.62,19.92],Lamia:[38.90,22.43],Komotini:[41.12,25.41],Mytilene:[39.11,26.55],Trikala:[39.56,21.77],Katerini:[40.27,22.50],Kozani:[40.30,21.79],Agrinio:[38.62,21.41],Sparta:[37.07,22.43],"Mandra Attikis":[38.07,23.50]};
+const MONTHS=["January","February","March","April","May","June","July","August","September","October","November","December"];
+const WMO={0:"Clear sky",1:"Mainly clear",2:"Partly cloudy",3:"Overcast",45:"Fog",48:"Fog",51:"Light drizzle",53:"Drizzle",55:"Heavy drizzle",56:"Freezing drizzle",57:"Freezing drizzle",61:"Light rain",63:"Rain",65:"Heavy rain",66:"Freezing rain",67:"Freezing rain",71:"Light snow",73:"Snow",75:"Heavy snow",77:"Snow grains",80:"Showers",81:"Showers",82:"Violent showers",85:"Snow showers",86:"Snow showers",95:"Thunderstorm",96:"Thunderstorm, hail",99:"Thunderstorm, hail"};
+const WXGROUPS={sun:"Clear / mainly clear",part:"Partly cloudy",cloud:"Overcast",fog:"Fog",rain:"Rain / drizzle",snow:"Snow",storm:"Thunderstorm"};
+const WXKEYS=Object.keys(WXGROUPS);
+const catOf=c=>{if(c<=1)return"sun";if(c===2)return"part";if(c===3)return"cloud";if(c===45||c===48)return"fog";if((c>=51&&c<=67)||(c>=80&&c<=82))return"rain";if((c>=71&&c<=77)||c===85||c===86)return"snow";if(c>=95)return"storm";return"cloud"};
+const BFT=[1,6,12,20,29,39,50,62,75,89,103,118]; // km/h lower bounds of Beaufort 1..12
+const beaufort=v=>BFT.filter(t=>v>=t).length;
+const NOW=new Date(), YEAR_NOW=NOW.getFullYear();
+const fmt=new Intl.DateTimeFormat("en-CA",{timeZone:"Europe/Athens",year:"numeric",month:"2-digit",day:"2-digit"});
+const todayKey=fmt.format(NOW);
+const $=id=>document.getElementById(id);
+let year=YEAR_NOW, city=null, data={}, loaded=false, selected=null;
+
+/* ---------- user-selected rules ---------- */
+const DEFAULTS={g:{min:{on:true,v:10},max:{on:true,v:25},bft:{on:true,v:1},wx:{on:true,vals:["sun","part"]}},
+                r:{min:{on:true,v:23},max:{on:true,v:36},bft:{on:false,v:6},wx:{on:false,vals:["storm"]}}};
+let R;
+try{R=JSON.parse(localStorage.getItem("gwRules"))||null}catch(e){R=null}
+if(!R||!R.g||!R.r)R=JSON.parse(JSON.stringify(DEFAULTS));
+const saveR=()=>{try{localStorage.setItem("gwRules",JSON.stringify(R))}catch(e){}};
+
+function classify(d){
+  const b=beaufort(d.wind), c=catOf(d.code), g=R.g, r=R.r;
+  // green: every enabled condition must hold; if none enabled, day is never green
+  let gOn=[g.min.on,g.max.on,g.bft.on,g.wx.on].some(Boolean);
+  if(gOn){
+    if(g.min.on&&!(d.min>g.min.v))gOn=false;
+    else if(g.max.on&&!(d.max<g.max.v))gOn=false;
+    else if(g.bft.on&&!(b<=g.bft.v))gOn=false;
+    else if(g.wx.on&&!g.wx.vals.includes(c))gOn=false;
+    if(gOn)return"g";
+  }
+  // red: all enabled conditions must hold; if none enabled, never red
+  const rOn=[r.min.on,r.max.on,r.bft.on,r.wx.on].some(Boolean);
+  if(!rOn)return"y";
+  if(r.min.on&&!(d.min>r.min.v))return"y";
+  if(r.max.on&&!(d.max>r.max.v))return"y";
+  if(r.bft.on&&!(b>=r.bft.v))return"y";
+  if(r.wx.on&&!r.wx.vals.includes(c))return"y";
+  return"r";
+}
+
+function ruleText(t){
+  const q=[];const u=(o,s)=>q.push(s.replace("{}",o.v));
+  if(t.min.on)u(t.min,"min > {}°");
+  if(t.max.on)u(t.max,t===R.r?"max > {}°":"max < {}°");
+  if(t.bft.on)u(t.bft,t===R.r?"wind ≥ Bft {}":"wind ≤ Bft {}");
+  if(t.wx.on)q.push("weather: "+t.wx.vals.map(k=>WXGROUPS[k]).join(" / "));
+  return q.length?q.join(", "):"(no conditions set)";
+}
+function legend(){
+  $("legG").textContent="Green: "+ruleText(R.g);
+  $("legR").textContent="Red: "+ruleText(R.r);
+  $("legY").textContent="Yellow: anything else";
+}
+
+/* ---------- rules UI ---------- */
+["g","r"].forEach(side=>{
+  $(""+side+"Wx").innerHTML=WXKEYS.map(k=>`<label><input type="checkbox" data-wx="${k}">${WXGROUPS[k]}</label>`).join("");
+});
+function syncUI(){
+  ["g","r"].forEach(side=>{
+    const t=R[side];
+    $(side+"MinOn").checked=t.min.on;$(side+"Min").value=t.min.v;
+    $(side+"MaxOn").checked=t.max.on;$(side+"Max").value=t.max.v;
+    $(side+"BftOn").checked=t.bft.on;$(side+"Bft").value=t.bft.v;
+    $(side+"WxOn").checked=t.wx.on;
+    $(""+side+"Wx").querySelectorAll("input[data-wx]").forEach(i=>i.checked=t.wx.vals.includes(i.dataset.wx));
+    $(side+"Wx").style.opacity=t.wx.on?1:.4;
+    $(side+"Min").disabled=!t.min.on;$(side+"Max").disabled=!t.max.on;$(side+"Bft").disabled=!t.bft.on;
+    $(""+side+"Wx").querySelectorAll("input").forEach(i=>i.disabled=!t.wx.on);
+  });
+  legend();
+}
+function readUI(){
+  ["g","r"].forEach(side=>{
+    const t=R[side];
+    t.min.on=$(side+"MinOn").checked;t.min.v=parseFloat($(side+"Min").value);
+    t.max.on=$(side+"MaxOn").checked;t.max.v=parseFloat($(side+"Max").value);
+    t.bft.on=$(side+"BftOn").checked;t.bft.v=parseInt($(side+"Bft").value)||0;
+    t.wx.on=$(side+"WxOn").checked;
+    t.wx.vals=[...$(""+side+"Wx").querySelectorAll("input[data-wx]")].filter(i=>i.checked).map(i=>i.dataset.wx);
+  });
+  saveR();syncUI();render();updateCounts();
+}
+["g","r"].forEach(side=>{
+  ["MinOn","Min","MaxOn","Max","BftOn","Bft"].forEach(k=>$(side+k).addEventListener("input",readUI));
+  $(side+"WxOn").addEventListener("input",readUI);
+  $(""+side+"Wx").addEventListener("change",readUI);
+});
+$("rulesBtn").onclick=()=>{$("rules").classList.toggle("open")};
+$("resetRules").onclick=()=>{R=JSON.parse(JSON.stringify(DEFAULTS));saveR();syncUI();render();updateCounts();};
+syncUI();
+
+/* ---------- calendar ---------- */
+$("city").innerHTML=Object.keys(CITIES).map(c=>`<option>${c}</option>`).join("");
+
+function render(){
+  $("yr").textContent=year; $("next").disabled=year>=YEAR_NOW;
+  const cal=$("cal"); cal.innerHTML="";
+  for(let m=0;m<12;m++){
+    const first=new Date(Date.UTC(year,m,1)), n=new Date(Date.UTC(year,m+1,0)).getUTCDate(), off=(first.getUTCDay()+6)%7;
+    let h=`<div class="month"><h2>${MONTHS[m]}</h2><div class="days">`;
+    ["M","T","W","T","F","S","S"].forEach(x=>h+=`<div class="dow">${x}</div>`);
+    for(let i=0;i<off;i++) h+="<div></div>";
+    for(let d=1;d<=n;d++){
+      const key=`${year}-${String(m+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`, w=data[key];
+      let cls="",click="";
+      if(loaded&&w&&key<=todayKey){cls=classify(w);click=" click";}
+      h+=`<div class="d ${cls}${click}${key===selected?" sel":""}" data-k="${key}">${d}</div>`;
+    }
+    cal.insertAdjacentHTML("beforeend",h+"</div></div>");
+  }
+}
+
+function updateCounts(){
+  if(!loaded)return;
+  const c={g:0,y:0,r:0}; Object.keys(data).forEach(k=>{if(k<=todayKey)c[classify(data[k])]++;});
+  $("status").textContent=`${city} ${year}: ${c.g} green · ${c.y} yellow · ${c.r} red days (Open-Meteo data). Click a day for details.`;
+}
+
+function showDay(key){
+  selected=key; render();
+  const w=data[key], b=beaufort(w.wind), c=catOf(w.code), cls=classify(w);
+  const chk=(ok,t)=>`<span class="${ok?"ok":"no"}">${ok?"✔":"✘"}</span> ${t}`;
+  const g=R.g,r=R.r;
+  $("ptitle").textContent=`${city} — ${key}`;
+  $("pbody").innerHTML=`<table>
+   <tr><td>Min / max temperature</td><td>${w.min.toFixed(1)}° / ${w.max.toFixed(1)}°C</td></tr>
+   <tr><td>Mean wind</td><td>${w.wind.toFixed(1)} km/h (Beaufort ${b})</td></tr>
+   <tr><td>Weather</td><td>${WMO[w.code]||"Code "+w.code} (${WXGROUPS[c]})</td></tr>
+   <tr><td>Green test</td><td>${g.min.on?chk(w.min>g.min.v,"min &gt; "+g.min.v+"°"):""} ${g.max.on?chk(w.max<g.max.v,"max &lt; "+g.max.v+"°"):""} ${g.bft.on?chk(b<=g.bft.v,"Bft ≤ "+g.bft.v):""} ${g.wx.on?chk(g.wx.vals.includes(c),g.wx.vals.map(k=>WXGROUPS[k]).join("/")):""}</td></tr>
+   <tr><td>Red test</td><td>${r.min.on?chk(w.min>r.min.v,"min &gt; "+r.min.v+"°"):""} ${r.max.on?chk(w.max>r.max.v,"max &gt; "+r.max.v+"°"):""} ${r.bft.on?chk(b>=r.bft.v,"Bft ≥ "+r.bft.v):""} ${r.wx.on?chk(r.wx.vals.includes(c),r.wx.vals.map(k=>WXGROUPS[k]).join("/")):""}</td></tr>
+   <tr><td>Result</td><td><b>${{g:"Green",y:"Yellow",r:"Red"}[cls]}</b></td></tr></table>`;
+  $("panel").style.display="block";
+}
+
+function parse(j,out){
+  const d=j.daily, h=j.hourly, sum={}, cnt={};
+  h.time.forEach((t,i)=>{const k=t.slice(0,10),v=h.wind_speed_10m[i]; if(v==null) return; sum[k]=(sum[k]||0)+v; cnt[k]=(cnt[k]||0)+1;});
+  d.time.forEach((k,i)=>{
+    if(d.temperature_2m_min[i]==null||d.temperature_2m_max[i]==null||d.weather_code[i]==null||!cnt[k]) return;
+    out[k]={min:d.temperature_2m_min[i],max:d.temperature_2m_max[i],code:d.weather_code[i],wind:sum[k]/cnt[k]};
+  });
+}
+const q="&daily=temperature_2m_min,temperature_2m_max,weather_code&hourly=wind_speed_10m&timezone=Europe%2FAthens";
+const addDays=(k,n)=>{const d=new Date(k+"T12:00:00Z");d.setUTCDate(d.getUTCDate()+n);return d.toISOString().slice(0,10);};
+
+async function load(){
+  city=$("city").value; const [la,lo]=CITIES[city];
+  loaded=false; data={}; selected=null; $("panel").style.display="none"; render();
+  $("status").textContent=`Loading ${year} weather for ${city}…`;
+  try{
+    const out={}, jobs=[];
+    const archEnd=year<YEAR_NOW?`${year}-12-31`:addDays(todayKey,-8);
+    if(archEnd>=`${year}-01-01`)
+      jobs.push(fetch(`https://archive-api.open-meteo.com/v1/archive?latitude=${la}&longitude=${lo}&start_date=${year}-01-01&end_date=${archEnd}${q}`).then(r=>r.json()).then(j=>{if(j.error)throw j.reason;parse(j,out);}));
+    if(year===YEAR_NOW)
+      jobs.push(fetch(`https://api.open-meteo.com/v1/forecast?latitude=${la}&longitude=${lo}&past_days=7&forecast_days=1${q}`).then(r=>r.json()).then(j=>{if(j.error)throw j.reason;parse(j,out);}));
+    await Promise.all(jobs);
+    data=out; loaded=true; render(); updateCounts();
+  }catch(e){$("status").textContent="Could not load weather data. Check your internet connection and open the file in a regular browser (not a preview).";}
+}
+
+$("go").onclick=load;
+$("prev").onclick=()=>{year--;load();};
+$("next").onclick=()=>{if(year<YEAR_NOW){year++;load();}};
+$("cal").addEventListener("click",e=>{const d=e.target.closest(".d.click"); if(d) showDay(d.dataset.k);});
+$("close").onclick=()=>{$("panel").style.display="none";selected=null;render();};
+render();
+</script>
+</body>
+</html>
